@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <title>Canlı Metrikler</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{--bg:#0b1220;--panel:#0f172a;--text:#e5e7eb;--muted:#94a3b8;--ok:#10b981;--bad:#ef4444}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui, -apple-system, Segoe UI, Inter, Roboto}
+    .wrap{max-width:900px;margin:24px auto;padding:0 16px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+          border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:16px}
+    h1{margin:0 0 12px;font-size:18px}
+    .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+    .kpi{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
+         border-radius:12px;padding:10px;text-align:center}
+    .kpi .v{font-weight:800;font-size:18px}
+    pre{background:#0a0f1a;color:#a7f3d0;border:1px solid rgba(255,255,255,.12);padding:12px;border-radius:12px;overflow:auto}
+    .muted{color:var(--muted)}
+    .dot{display:inline-block;width:8px;height:8px;border-radius:999px;margin-right:6px;background:#888}
+    .ok{background:var(--ok)} .bad{background:var(--bad)}
+    .section{margin-top:16px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .table{width:100%;border-collapse:collapse;margin-top:8px}
+    .table th,.table td{padding:8px;border-bottom:1px solid rgba(255,255,255,.12);text-align:left}
+    .actions{display:flex;gap:8px;align-items:center;margin:8px 0}
+    .chip{display:inline-block;padding:2px 8px;border:1px solid rgba(255,255,255,.12);border-radius:999px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Canlı Metrikler</h1>
+      <div id="status" class="muted">Bağlanıyor…</div>
+      <div class="kpis">
+        <div class="kpi"><div class="muted">Toplam</div><div id="m-total" class="v">0</div></div>
+        <div class="kpi"><div class="muted">Başarılı</div><div id="m-success" class="v">0</div></div>
+        <div class="kpi"><div class="muted">Başarısız</div><div id="m-failed" class="v">0</div></div>
+        <div class="kpi"><div class="muted">Kuyruk</div><div id="m-queued" class="v">0</div></div>
+        <div class="kpi"><div class="muted">Ort. ACK (ms)</div><div id="m-ack" class="v">-</div></div>
+      </div>
+      <div class="muted" style="margin:6px 0 10px">
+        <span class="dot" id="conn-dot"></span><span id="conn-text">Bağlantı durumu</span>
+      </div>
+      <pre id="raw">—</pre>
+    </div>
+    <div class="section">
+        <h2>Veritabanı Anlık Görünüm <span class="chip muted">dev-only</span></h2>
+        <div class="actions">
+          <button id="btn-refresh">Yenile</button>
+          <label class="muted"><input id="auto" type="checkbox" checked> otomatik yenile</label>
+        </div>
+      
+        <div class="grid2">
+          <div>
+            <h3>Products</h3>
+            <table class="table" id="t-products"></table>
+          </div>
+          <div>
+            <h3>Labels</h3>
+            <table class="table" id="t-labels"></table>
+          </div>
+          <div>
+            <h3>Assignments</h3>
+            <table class="table" id="t-assign"></table>
+          </div>
+          <div>
+            <h3>Price Requests</h3>
+            <table class="table" id="t-reqs"></table>
+          </div>
+          <div style="grid-column:1/-1">
+            <h3>Push Jobs</h3>
+            <table class="table" id="t-jobs"></table>
+          </div>
+        </div>
+      </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/live/ws');
+    ws.onopen = () => {
+      $('status').textContent = 'Bağlandı. Canlı veri akışı başladı.';
+      $('conn-dot').classList.add('ok'); $('conn-text').textContent = 'WebSocket açık';
+      ws.send('hi');
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'metrics') {
+          $('m-total').textContent = msg.total ?? 0;
+          $('m-success').textContent = msg.success ?? 0;
+          $('m-failed').textContent = msg.failed ?? 0;
+          $('m-queued').textContent = msg.queued ?? 0;
+          $('m-ack').textContent = msg.avg_ack_ms ?? '-';
+          $('raw').textContent = JSON.stringify(msg, null, 2);
+        }
+      } catch {}
+    };
+    ws.onclose = () => {
+      $('conn-dot').classList.remove('ok'); $('conn-dot').classList.add('bad');
+      $('conn-text').textContent = 'WebSocket kapandı'; $('status').textContent = 'Bağlantı kapandı.';
+    };
+  </script>
+  <script>
+    function fillTable(sel, rows, cols){
+      const el = document.querySelector(sel);
+      const head = '<thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead>';
+      const body = '<tbody>' + (
+        rows && rows.length
+          ? rows.map(r=>'<tr>'+cols.map(c=>`<td>${r[c] ?? ''}</td>`).join('')+'</tr>').join('')
+          : `<tr><td class="muted" colspan="${cols.length}">—</td></tr>`
+      ) + '</tbody>';
+      el.innerHTML = head + body;
+    }
+  
+    async function loadDB(){
+      try{
+        const r = await fetch('/live/db-snapshot');
+        if(!r.ok){ return; } // dev guard kapalı olabilir
+        const d = await r.json();
+        fillTable('#t-products', d.products, ['id','sku','name','base_price','currency']);
+        fillTable('#t-labels', d.labels, ['id','label_code','store','status']);
+        fillTable('#t-assign', d.assignments, ['label_id','product_id']);
+        fillTable('#t-reqs', d.price_requests, ['id','product_id','store','new_price','status']);
+        fillTable('#t-jobs', d.push_jobs, ['id','request_id','label_id','status','try_count']);
+      }catch(e){}
+    }
+  
+    // buton ve otomatik yenile
+    document.getElementById('btn-refresh').onclick = loadDB;
+    let auto = true;
+    const chk = document.getElementById('auto');
+    chk.onchange = e => auto = e.target.checked;
+    setInterval(()=>{ if(auto) loadDB(); }, 1500);
+  
+    // mevcut ws.onmessage'in en sonunda:
+    // $('raw').textContent = JSON.stringify(msg, null, 2);
+    // ↓ ekleyin
+    loadDB();
+  </script>
+</body>
+</html>
