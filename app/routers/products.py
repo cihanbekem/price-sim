@@ -50,3 +50,14 @@ async def list_products(session: AsyncSession = Depends(get_session)):
         "id": p.id, "sku": p.sku, "name": p.name,
         "base_price": p.base_price, "currency": p.currency
     }) for p in items]
+
+@router.get("/next-id")
+async def next_product_id(session: AsyncSession = Depends(get_session)):
+    from sqlalchemy import func, cast, Integer
+    from sqlalchemy import select
+    n = (await session.execute(
+        select(func.coalesce(
+            func.max(cast(func.substr(models.Product.id, func.instr(models.Product.id, '-') + 1), Integer)), 0
+        ))
+    )).scalar_one()
+    return {"id": f"p-{n+1}"}

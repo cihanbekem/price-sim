@@ -129,3 +129,13 @@ async def labels_wall(session: AsyncSession = Depends(get_session)):
             }
         })
     return out
+
+@router.get("/next-id")
+async def next_label_id(session: AsyncSession = Depends(get_session)):
+    from sqlalchemy import func, cast, Integer, select
+    n = (await session.execute(
+        select(func.coalesce(
+            func.max(cast(func.substr(models.ShelfLabel.id, func.instr(models.ShelfLabel.id, '-') + 1), Integer)), 0
+        ))
+    )).scalar_one()
+    return {"id": f"l-{n+1}"}

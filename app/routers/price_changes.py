@@ -1,12 +1,34 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from ..database import get_session
 from .. import models
 from ..schemas import PriceChangeCreate, ApprovalIn
 
 router = APIRouter(prefix="/price-changes", tags=["price-changes"])
+
+@router.get("/next-id")
+async def get_next_id(session: AsyncSession = Depends(get_session)):
+    # Find the highest existing ID and suggest the next one
+    result = await session.execute(
+        select(func.max(models.PriceChangeRequest.id))
+    )
+    max_id = result.scalar()
+    
+    if not max_id:
+        return {"id": "req-1"}
+    
+    # Extract number from ID like "req-123" and increment
+    try:
+        parts = max_id.split("-")
+        if len(parts) >= 2:
+            num = int(parts[-1]) + 1
+            return {"id": f"{parts[0]}-{num}"}
+    except (ValueError, IndexError):
+        pass
+    
+    return {"id": "req-1"}
 
 @router.post("/")
 async def create_price_change(
@@ -75,3 +97,6 @@ async def approve_price_change(
 
     await session.commit()
     return {"ok": True, "status": req.status}
+
+
+
