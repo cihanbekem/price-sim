@@ -1,6 +1,7 @@
 // @ts-nocheck
-/* global React, ReactDOM */
+/* global React, ReactDOM, api, Login */
 
+// ---------------- THEME ----------------
 const THEME_KEY = 'ui-theme';
 const getTheme = () =>
   document.documentElement.getAttribute('data-theme') ||
@@ -9,38 +10,24 @@ const applyTheme = (t) => {
   document.documentElement.setAttribute('data-theme', t);
   localStorage.setItem(THEME_KEY, t);
 };
-
 function ThemeSwitch(){
   const [theme, setTheme] = React.useState(getTheme());
   React.useEffect(()=>{ applyTheme(theme); }, [theme]);
-  const toggle = () => setTheme(theme === 'dark' ? 'light' : 'dark');
   return (
-    <button className="theme-btn" onClick={toggle} title="Tema değiştir">
+    <button className="theme-btn" onClick={()=>setTheme(theme==='dark'?'light':'dark')} title="Tema değiştir">
       {theme === 'dark' ? '🌙 Koyu' : '☀️ Açık'}
     </button>
   );
 }
 
-// ---- SIRALI ID YARDIMCILARI (UI üretir, server'dan ilk senkron yapılır) ----
-const SEQ_KEY = "esl_seq_v1";
-function readSeq() { try { return JSON.parse(localStorage.getItem(SEQ_KEY) || "{}"); } catch { return {}; } }
-function writeSeq(s) { localStorage.setItem(SEQ_KEY, JSON.stringify(s)); }
-function peekNext(prefix) { const s = readSeq(); const n = (s[prefix] || 0) + 1; return `${prefix}-${n}`; }
-function bump(prefix) { const s = readSeq(); s[prefix] = (s[prefix] || 0) + 1; writeSeq(s); return `${prefix}-${s[prefix]}`; }
-function syncNext(prefix, nextIdFromServer) {
-  // nextIdFromServer = "p-12" gibi → localStorage sayacını 11 yapar ki peekNext() 12 döndürsün
-  const n = parseInt(String(nextIdFromServer).split("-").pop(), 10);
-  if (!isFinite(n)) return;
-  const s = readSeq(); const cur = s[prefix] || 0;
-  if (n-1 > cur) { s[prefix] = n-1; writeSeq(s); }
-}
-
-// ---- API ----
-const api = {
+// -------- HTTP yardımcıları (auth.jsx’teki api’yi gölgelemiyor!) --------
+const http = {
   async post(url, body) {
     const r = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json",
+        ...(localStorage.getItem('auth-token') ? { Authorization: `Bearer ${localStorage.getItem('auth-token')}` } : {})
+      },
       body: JSON.stringify(body || {}),
     });
     const d = await r.json().catch(() => ({}));
@@ -48,20 +35,25 @@ const api = {
     return d;
   },
   async get(url) {
-    const r = await fetch(url);
+    const r = await fetch(url, {
+      headers: { ...(localStorage.getItem('auth-token') ? { Authorization: `Bearer ${localStorage.getItem('auth-token')}` } : {}) }
+    });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d?.detail || r.statusText);
     return d;
   },
   async del(url) {
-    const r = await fetch(url, { method: "DELETE" });
+    const r = await fetch(url, {
+      method: "DELETE",
+      headers: { ...(localStorage.getItem('auth-token') ? { Authorization: `Bearer ${localStorage.getItem('auth-token')}` } : {}) }
+    });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d?.detail || r.statusText);
     return d;
   },
 };
 
-// ---- UI yardımcıları ----
+// ------------- küçük yardımcılar -------------
 const priceParts = (val) => {
   const n = Number(val ?? 0);
   const s = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
@@ -73,7 +65,9 @@ function useWebSocketMetrics() {
   const [m, setM] = React.useState({ total:0, success:0, failed:0, queued:0, processing:0, avg_ack_ms:null });
   React.useEffect(() => {
     const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/live/ws");
-    ws.onopen = () => ws.send("hi");
+    ws.onopen = () => {
+      try { ws.send(JSON.stringify({ type:"hello", user:(api?.user && (api.user.name||api.user.email))||"" })); } catch {}
+    };
     ws.onmessage = (ev) => {
       try { const msg = JSON.parse(ev.data); if (msg.type === "metrics") setM(msg); } catch {}
     };
@@ -82,6 +76,7 @@ function useWebSocketMetrics() {
   return m;
 }
 
+// ------------- shell -------------
 function Tabs({ current, onChange }) {
   const items = [
     { id: "dash", label: "Dashboard" },
@@ -132,7 +127,33 @@ function Dashboard() {
   );
 }
 
-// ---- Etiket kartları ----
+// -------- kullanıcı üst sağ: avatar + isim --------
+function readUser(){
+  try { return JSON.parse(localStorage.getItem("auth-user")||"{}"); } catch { return {}; }
+}
+function UserBox(){
+  const [user, setUser] = React.useState(()=> api?.user || readUser());
+  React.useEffect(()=>{ if (api?.user) setUser(api.user); }, []);
+  if (!user || !user.name) return null;
+  const initials = String(user.name).split(/\s+/).filter(Boolean).slice(0,2).map(s=>s[0]).join('').toUpperCase();
+  return (
+    <div className="userbox">
+      <div className="avatar">{initials || "U"}</div>
+      <div className="name">{user.name}</div>
+    </div>
+  );
+}
+function LogoutButton({ onLoggedOut }){
+  const doLogout = () => {
+    try { api?.setToken?.(null); } catch {}
+    try { localStorage.removeItem('auth-token'); localStorage.removeItem('auth-user'); } catch {}
+    if (typeof onLoggedOut === 'function') onLoggedOut();
+    location.reload();
+  };
+  return <button className="btn danger" onClick={doLogout} title="Çıkış">Çıkış</button>;
+}
+
+// ------------- Etiket Duvarı -------------
 function LabelCard({ label, product, onClick }) {
   const p = product;
   const [intP, decP] = priceParts(p?.price);
@@ -161,10 +182,9 @@ function LabelCard({ label, product, onClick }) {
     </div>
   );
 }
-
 function LabelWall() {
   const [cards, setCards] = React.useState([]);
-  React.useEffect(() => { api.get("/labels/wall").then(setCards); }, []);
+  React.useEffect(() => { http.get("/labels/wall").then(setCards); }, []);
   React.useEffect(() => {
     const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/live/ws");
     ws.onmessage = (ev) => {
@@ -188,7 +208,7 @@ function LabelWall() {
   async function onCardClick(label) {
     const ok = window.confirm(`Etiketi silmek istiyor musun?\n${label.id} (#${label.label_code})`);
     if (!ok) return;
-    try { await api.del(`/labels/${label.id}`); setCards(L => L.filter(x => x.label.id !== label.id)); }
+    try { await http.del(`/labels/${label.id}`); setCards(L => L.filter(x => x.label.id !== label.id)); }
     catch (e) { alert(`Silinemedi: ${e.message}`); }
   }
   return (
@@ -201,41 +221,92 @@ function LabelWall() {
   );
 }
 
-// ---- Katalog ----
+// ------------- Fiyat Geçmişi paneli -------------
+function PriceHistoryPanel({ productId, store }) {
+  const [rows, setRows] = React.useState([]);
+  React.useEffect(() => {
+    if (!productId) return;
+    const qs = new URLSearchParams({ limit: 20, ...(store ? { store } : {}) });
+    http.get(`/products/${productId}/price-history?` + qs.toString())
+      .then(setRows).catch(()=>setRows([]));
+  }, [productId, store]);
+
+  if (!productId) return null;
+  return (
+    <div className="card">
+      <h2>Fiyat Geçmişi — {productId}</h2>
+      {rows.length === 0 ? <div className="muted">kayıt yok</div> : (
+        <table>
+          <thead><tr><th>tarih</th><th>store</th><th>old → new</th><th>kaynak</th></tr></thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id}>
+                <td>{new Date(r.changed_at).toLocaleString()}</td>
+                <td>{r.store}</td>
+                <td>{(r.old_price ?? "-")} → {r.new_price}</td>
+                <td>{r.source_request_id || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ------------- Katalog -------------
 function Catalog() {
   const [products, setProducts] = React.useState([]);
   const [labels, setLabels] = React.useState([]);
-  const [p, setP] = React.useState({ id: peekNext("p"), sku: "", name: "", base_price: 0 });
-  const [l, setL] = React.useState({ id: peekNext("l"), code: "", store: "IST-01" });
+  const [p, setP] = React.useState({ id: "p-1", sku: "", name: "", base_price: 0 });
+  const [l, setL] = React.useState({ id: "l-1", code: "", store: "IST-01" });
   const [a, setA] = React.useState({ label_id: "", product_id: "" });
   const [msg, setMsg] = React.useState("");
+  const [selected, setSelected] = React.useState(null);
 
   async function refresh() {
-    const [ps, ls] = await Promise.all([api.get("/products/"), api.get("/labels/")]);
+    const [ps, ls] = await Promise.all([http.get("/products/"), http.get("/labels/")]);
     setProducts(ps); setLabels(ls);
   }
-  React.useEffect(() => { refresh(); }, []);
+  React.useEffect(() => {
+    refresh();
+    // next-id senkronu
+    http.get("/products/next-id").then(({id}) => setP(v=>({...v, id}))).catch(()=>{});
+    http.get("/labels/next-id").then(({id}) => setL(v=>({...v, id}))).catch(()=>{});
+  }, []);
+
+  // canlı güncelleme -> listeyi taze tut
+  React.useEffect(() => {
+    let timer = null;
+    const scheduleRefresh = () => { if (timer) return; timer = setTimeout(()=>{ timer=null; refresh().catch(()=>{}); }, 250); };
+    const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/live/ws");
+    ws.onmessage = (ev) => {
+      let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+      const RELOAD = new Set(["product-created","product-updated","product-deleted","label-created","label-updated","label-deleted","label-assigned","label-unassigned"]);
+      if (msg?.type && RELOAD.has(msg.type)) scheduleRefresh();
+    };
+    return () => { try{ws.close();}catch{} if (timer) clearTimeout(timer); };
+  }, []);
 
   async function createProduct() {
     try {
-      await api.post("/products/", { id: p.id, sku: p.sku, name: p.name, base_price: parseFloat(p.base_price || 0), currency: "TRY" });
+      await http.post("/products/", { id: p.id, sku: p.sku, name: p.name, base_price: parseFloat(p.base_price || 0), currency: "TRY" });
       setMsg("Ürün kaydedildi");
-      bump("p");
-      setP({ id: peekNext("p"), sku: "", name: "", base_price: 0 });
+      // sıradaki
+      http.get("/products/next-id").then(({id}) => setP({ id, sku:"", name:"", base_price:0 }));
       refresh();
     } catch (e) { setMsg("Hata: " + e.message); }
   }
   async function createLabel() {
     try {
-      await api.post("/labels/", { id: l.id, label_code: l.code, store: l.store });
+      await http.post("/labels/", { id: l.id, label_code: l.code, store: l.store });
       setMsg("Etiket kaydedildi");
-      bump("l");
-      setL({ id: peekNext("l"), code: "", store: "IST-01" });
+      http.get("/labels/next-id").then(({id}) => setL({ id, code:"", store:"IST-01" }));
       refresh();
     } catch (e) { setMsg("Hata: " + e.message); }
   }
   async function assign() {
-    try { await api.post("/labels/assign", a); setMsg("Eşleştirme yapıldı"); refresh(); }
+    try { await http.post("/labels/assign", a); setMsg("Eşleştirme yapıldı"); refresh(); }
     catch (e) { setMsg("Hata: " + e.message); }
   }
 
@@ -256,7 +327,13 @@ function Catalog() {
         <div style={{height:8}} />
         <table>
           <thead><tr><th>id</th><th>sku</th><th>ad</th><th>fiyat</th></tr></thead>
-          <tbody>{products.map(x=><tr key={x.id}><td>{x.id}</td><td>{x.sku}</td><td>{x.name}</td><td>{x.base_price}</td></tr>)}</tbody>
+          <tbody>
+            {products.map(x => (
+              <tr key={x.id} onClick={()=>setSelected(x.id)} className={selected===x.id?"selected":""} style={{cursor:"pointer"}}>
+                <td>{x.id}</td><td>{x.sku}</td><td>{x.name}</td><td>{x.base_price}</td>
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
 
@@ -292,46 +369,37 @@ function Catalog() {
           <thead><tr><th>id</th><th>code</th><th>store</th><th>durum</th></tr></thead>
           <tbody>{labels.map(x=><tr key={x.id}><td>{x.id}</td><td>{x.label_code}</td><td>{x.store}</td><td><span className="badge ok">{x.status}</span></td></tr>)}</tbody>
         </table>
+
+        <PriceHistoryPanel productId={selected} />
       </div>
     </div>
   );
 }
 
-// ---- Fiyat Değişikliği ----
+// ------------- Fiyat Değişikliği -------------
 function PriceChangeWizard() {
   const [products, setProducts] = React.useState([]);
-  const [req, setReq] = React.useState({ id: peekNext("req"), product_id: "", store: "IST-01", new_price: "" });
+  const [req, setReq] = React.useState({ id: "req-1", product_id: "", store: "IST-01", new_price: "" });
   const [status, setStatus] = React.useState("PENDING");
   const [log, setLog] = React.useState([]);
   const pushLog = (t) => setLog((L)=>[...L, t]);
 
-  // İlk açılışta DB'den "sonraki id"leri okuyup sayaçları senkronla
   React.useEffect(() => {
-    api.get("/products/next-id").then(({id}) => syncNext("p", id)).catch(()=>{});
-    api.get("/labels/next-id").then(({id}) => syncNext("l", id)).catch(()=>{});
-    api.get("/price-changes/next-id").then(({id}) => { syncNext("req", id); setReq(r => ({...r, id: peekNext("req")})); }).catch(()=>{});
+    http.get("/products/").then(setProducts);
+    http.get("/price-changes/next-id").then(({id}) => setReq(r => ({...r, id}))).catch(()=>{});
   }, []);
-
-  React.useEffect(() => { api.get("/products/").then(setProducts); }, []);
 
   async function createReq() {
     try {
-      await api.post("/price-changes/", { ...req, new_price: parseFloat(req.new_price || 0), reason: "panel" });
+      await http.post("/price-changes/", { ...req, new_price: parseFloat(req.new_price || 0), reason: "panel" });
       setStatus("PENDING"); pushLog(`Talep oluşturuldu (${req.id})`);
-      // NOT: id'yi değiştirmiyoruz; kullanıcı aynı id ile Onayla ve Push yapacak
     } catch (e) {
       pushLog("Talep hata: " + e.message);
-      // duplicate ise bir sonraki id'yi öner
-      if (/exists|unique|duplicate/i.test(e.message)) {
-        const nid = peekNext("req");
-        setReq(r => ({ ...r, id: nid }));
-        pushLog("Yeni id önerildi: " + nid);
-      }
     }
   }
   async function approve() {
     try {
-      await api.post(`/price-changes/${req.id}/approve`, { approver: "admin", decision: "APPROVE", comment: "ok" });
+      await http.post(`/price-changes/${req.id}/approve`, { approver: "admin", decision: "APPROVE", comment: "ok" });
       setStatus("APPROVED"); pushLog("Talep onaylandı");
     } catch (e) {
       pushLog("Onay hata: " + e.message);
@@ -339,12 +407,10 @@ function PriceChangeWizard() {
   }
   async function startPush() {
     try {
-      await api.post(`/push/${req.id}/start`, {});
+      await http.post(`/push/${req.id}/start`, {});
       pushLog("Dağıtım başlatıldı");
-      // süreç bitti, bir sonraki id’ye geç
-      bump("req");
-      setReq({ id: peekNext("req"), product_id:"", store:"IST-01", new_price:"" });
       setStatus("PENDING");
+      http.get("/price-changes/next-id").then(({id}) => setReq({ id, product_id:"", store:"IST-01", new_price:"" }));
     } catch (e) {
       pushLog("Push hata: " + e.message + " ➊ Talep APPROVED mı? ➋ Bu store için ürüne etiket eşli mi?");
     }
@@ -370,7 +436,7 @@ function PriceChangeWizard() {
         <button className="btn" onClick={approve} disabled={status!=="PENDING"}>2) Onayla</button>
         <button className="btn" onClick={startPush} disabled={status!=="APPROVED"}>3) Push Başlat</button>
         <button className="btn ghost" onClick={()=>{
-          setReq({ id: peekNext("req"), product_id:"", store:"IST-01", new_price:"" });
+          http.get("/price-changes/next-id").then(({id}) => setReq({ id, product_id:"", store:"IST-01", new_price:"" }));
           setStatus("PENDING"); setLog([]);
         }}>Temizle</button>
       </div>
@@ -382,31 +448,21 @@ function PriceChangeWizard() {
   );
 }
 
+// ------------- Dağıtımlar -------------
 function Deployments() {
   const [jobs, setJobs] = React.useState([]);
   const [auto, setAuto] = React.useState(true);
   const [error, setError] = React.useState("");
-  
+
   async function load(){ 
-    try {
-      const data = await api.get("/push/jobs");
-      setJobs(data);
-      setError("");
-    } catch (e) {
-      setError("Yükleme hatası: " + e.message);
-      console.error("Jobs load error:", e);
-    }
+    try { const data = await http.get("/push/jobs"); setJobs(data); setError(""); }
+    catch (e) { setError("Yükleme hatası: " + e.message); }
   }
-  
   React.useEffect(()=>{ load(); },[]);
-  React.useEffect(()=>{ 
-    if(!auto) return; 
-    const t = setInterval(load, 2000); 
-    return ()=> clearInterval(t); 
-  },[auto]);
-  
+  React.useEffect(()=>{ if(!auto) return; const t = setInterval(load, 2000); return ()=> clearInterval(t); },[auto]);
+
   const badge = (s) => s==="SUCCESS" ? "badge ok" : s==="FAILED" ? "badge bad" : s==="PROCESSING" ? "badge warn" : "badge";
-  
+
   return (
     <div className="card">
       <h2>Dağıtım İşleri</h2>
@@ -439,6 +495,7 @@ function Deployments() {
   );
 }
 
+// ------------- Mağaza Kapsamı -------------
 function StoreCoverageCard() {
   const [rows, setRows] = React.useState([]);
   const [auto, setAuto] = React.useState(true);
@@ -446,25 +503,16 @@ function StoreCoverageCard() {
 
   async function load() {
     try {
-      const labels = await api.get("/labels/");
+      const labels = await http.get("/labels/");
       const by = {};
       (labels || []).forEach(l => { by[l.store] = (by[l.store] || 0) + 1; });
-      const out = Object.entries(by)
-        .map(([store, count]) => ({ store, count }))
-        .sort((a, b) => b.count - a.count);
-      setRows(out);
-      setErr("");
-    } catch (e) {
-      setErr("Kapsam yüklenemedi: " + e.message);
-    }
+      const out = Object.entries(by).map(([store, count]) => ({ store, count })).sort((a,b)=>b.count-a.count);
+      setRows(out); setErr("");
+    } catch (e) { setErr("Kapsam yüklenemedi: " + e.message); }
   }
 
   React.useEffect(() => { load(); }, []);
-  React.useEffect(() => {
-    if (!auto) return;
-    const t = setInterval(load, 3000);
-    return () => clearInterval(t);
-  }, [auto]);
+  React.useEffect(() => { if (!auto) return; const t = setInterval(load, 3000); return () => clearInterval(t); }, [auto]);
 
   const max = Math.max(1, ...rows.map(r => r.count));
   const total = rows.reduce((s, r) => s + r.count, 0);
@@ -497,18 +545,8 @@ function StoreCoverageCard() {
                   <td>{r.store}</td>
                   <td>{r.count}</td>
                   <td>
-                    <div style={{
-                      height: 10,
-                      background: "var(--muted-2)",
-                      borderRadius: 6,
-                      overflow: "hidden"
-                    }}>
-                      <div style={{
-                        width: pct + "%",
-                        height: "100%",
-                        background: "var(--accent)",
-                        transition: "width .3s"
-                      }} />
+                    <div style={{height:10, background:"var(--muted-2)", borderRadius:6, overflow:"hidden"}}>
+                      <div style={{width:pct+"%", height:"100%", background:"var(--accent)", transition:"width .3s"}}/>
                     </div>
                   </td>
                 </tr>
@@ -527,17 +565,13 @@ function StoreCoverageCard() {
   );
 }
 
-
+// ------------- App + Root -------------
 function App() {
   const [tab, setTab] = React.useState("dash");
   React.useEffect(()=>{
     const el = document.getElementById("tabs");
     ReactDOM.createRoot(el).render(<Tabs current={tab} onChange={setTab} />);
   }, [tab]);
-  React.useEffect(()=>{
-    const holder = document.getElementById("theme-toggle");
-    if (holder) ReactDOM.createRoot(holder).render(<ThemeSwitch />);
-  }, []);
   return (
     <>
       {tab==="dash" && <Dashboard/>}
@@ -548,5 +582,29 @@ function App() {
     </>
   );
 }
+function RootApp() {
+  const [authed, setAuthed] = React.useState(!!localStorage.getItem('auth-token'));
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+  // user’ı yükle
+  React.useEffect(()=>{ try { api.user = JSON.parse(localStorage.getItem("auth-user")||"null"); } catch {} }, []);
+
+  // header mount
+  React.useEffect(()=>{
+    const holder = document.getElementById("theme-toggle");
+    if (holder) ReactDOM.createRoot(holder).render(<ThemeSwitch />);
+    const ub = document.getElementById("userbox");
+    if (ub) ReactDOM.createRoot(ub).render(<UserBox />);
+    const lo = document.getElementById("logout-holder");
+    if (lo) ReactDOM.createRoot(lo).render(<LogoutButton onLoggedOut={()=>setAuthed(false)} />);
+  }, []);
+
+  if (!authed) return <Login onLoggedIn={(user) => {
+    api.user = user || api.user || null;
+    if (api.user) localStorage.setItem("auth-user", JSON.stringify(api.user));
+    setAuthed(true);
+  }} />;
+
+  return <App/>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<RootApp/>);

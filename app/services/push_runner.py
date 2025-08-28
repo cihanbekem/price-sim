@@ -5,9 +5,10 @@ from statistics import mean
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ..models import PushJob, PriceChangeRequest, Product, ShelfLabel
+from ..models import PushJob, PriceChangeRequest, Product, ShelfLabel, PriceHistory
 from .emulator import EmulatorService
 from ..routers.live import manager
+
 
 MAX_RETRY = 3
 
@@ -58,7 +59,59 @@ class PushRunner:
                 if ok:
                     job.status = "SUCCESS"
                     job.updated_at = datetime.utcnow()
-                    await session.commit()
+                    await session.commit()  # job SUCCESS
+
+                    # === TÜM JOB'LAR TAMAMLANDI MI? ===
+                    remaining_q = select(PushJob).where(
+                        (PushJob.request_id == req.id) & (PushJob.status != "SUCCESS")
+                    )
+                    remaining = (await session.execute(remaining_q)).scalars().all()
+
+                    if not remaining:
+                        # eski fiyat talepte kilitlendiyse onu kullan, yoksa mevcut base_price
+                        old_price = req.old_price if getattr(req, "old_price", None) is not None else prod.base_price
+                        new_price = float(req.new_price)
+
+                        if prod.base_price != new_price:
+                            # 1) ürüne yeni fiyatı uygula
+                            prod.base_price = new_price
+                            # 2) price history kaydı
+                            hist = PriceHistory(
+                                product_id=prod.id,
+                                store=req.store,
+                                old_price=old_price,
+                                new_price=new_price,
+                                source_request_id=req.id,
+                                changed_by="system/push",
+                            )
+                            session.add(hist)
+
+                        # (opsiyonel) request'i tamamlandı işaretle
+                        try:
+                            req.status = "COMPLETED"
+                            if hasattr(req, "updated_at"):
+                                req.updated_at = datetime.utcnow()
+                            if hasattr(req, "applied_at"):
+                                req.applied_at = datetime.utcnow()
+                        except Exception:
+                            pass
+
+                        await session.commit()
+
+                        # UI'ya canlı bildirim (LabelWall dinliyor)
+                        try:
+                            await manager.broadcast_json({
+                                "type": "product-updated",
+                                "product": {
+                                    "id": prod.id,
+                                    "name": prod.name,
+                                    "price": prod.base_price,
+                                    "currency": getattr(prod, "currency", "TRY"),
+                                },
+                            })
+                        except Exception:
+                            pass
+
                 else:
                     job.try_count += 1
                     if job.try_count >= MAX_RETRY:

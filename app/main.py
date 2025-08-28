@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 
 from .database import init_db, SessionLocal
-from .routers import products, labels, price_changes, push, live
+from .routers import products, labels, price_changes, push, live, auth
 from .services.emulator import EmulatorService
 from .services.push_runner import PushRunner
 
@@ -26,6 +26,7 @@ app.include_router(labels.router)
 app.include_router(price_changes.router)
 app.include_router(push.router)
 app.include_router(live.router)
+app.include_router(auth.router)
 
 # statik dosyalar
 app.mount("/static", StaticFiles(directory="static"), name="static")

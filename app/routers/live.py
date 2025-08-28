@@ -14,6 +14,7 @@ router = APIRouter(prefix="/live", tags=["live"])
 class WSManager:
     def __init__(self) -> None:
         self.connections: Set[WebSocket] = set()
+        self.usernames: dict[WebSocket, str] = {}
 
     async def connect(self, ws: WebSocket):
         await ws.accept()
@@ -21,6 +22,7 @@ class WSManager:
 
     def disconnect(self, ws: WebSocket):
         self.connections.discard(ws)
+        self.usernames.pop(ws, None)
 
     async def broadcast_json(self, data):
         to_drop = []
@@ -39,7 +41,18 @@ async def ws_endpoint(ws: WebSocket):
     await manager.connect(ws)
     try:
         while True:
-            await ws.receive_text()  # keepalive/ping
+            msg = await ws.receive_text()
+            try:
+                import json
+                data = json.loads(msg)
+                if isinstance(data, dict) and data.get("type") == "hello" and data.get("user"):
+                    manager.usernames[ws] = str(data["user"])[:80]
+                    await manager.broadcast_json({
+                        "type": "active-users",
+                        "users": sorted(set(manager.usernames.values())),
+                    })
+            except Exception:
+                pass
     except WebSocketDisconnect:
         manager.disconnect(ws)
 

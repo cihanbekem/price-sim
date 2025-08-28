@@ -4,6 +4,18 @@ from decimal import Decimal
 from sqlalchemy import String, Integer, ForeignKey, Numeric, DateTime, UniqueConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+
+class User(Base):
+    __tablename__ = "user"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    email: Mapped[str] = mapped_column(String, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String)
+    password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    provider: Mapped[str] = mapped_column(String, default="local")  # local/google
+    employee_no: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class Product(Base):
     __tablename__ = "product"
@@ -71,5 +83,17 @@ class PushJob(Base):
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     request: Mapped["PriceChangeRequest"] = relationship(back_populates="push_jobs")
+
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(String, ForeignKey("product.id"), nullable=False, index=True)
+    store = Column(String, nullable=False, index=True)
+    old_price = Column(Float)
+    new_price = Column(Float, nullable=False)
+    source_request_id = Column(String, ForeignKey("price_change_request.id"), nullable=True, index=True)
+    changed_by = Column(String, nullable=True)  # örn: "system/push" veya onaylayan kullanıcı
+    changed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 Index("ix_push_job_next", PushJob.next_run_at)

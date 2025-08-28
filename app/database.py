@@ -15,6 +15,14 @@ async def init_db() -> None:
     from . import models  # ensure models are imported
     async with engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
+        # lightweight migrations for SQLite
+        try:
+            cols = await conn.exec_driver_sql("PRAGMA table_info('user')")
+            names = {row[1] for row in cols}
+            if 'employee_no' not in names:
+                await conn.exec_driver_sql("ALTER TABLE user ADD COLUMN employee_no TEXT")
+        except Exception:
+            pass
 
 async def get_session() -> AsyncSession:
     async with SessionLocal() as session:

@@ -1,11 +1,16 @@
 from __future__ import annotations
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from ..database import get_session
 from .. import models
 from ..schemas import ProductCreate, ProductOut
+from typing import List, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app import models, schemas
+from app.database import get_session
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -61,3 +66,17 @@ async def next_product_id(session: AsyncSession = Depends(get_session)):
         ))
     )).scalar_one()
     return {"id": f"p-{n+1}"}
+
+@router.get("/{product_id}/price-history", response_model=List[schemas.PriceHistoryOut])
+async def get_price_history(
+    product_id: str,
+    store: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    session: AsyncSession = Depends(get_session),
+):
+    q = select(models.PriceHistory).where(models.PriceHistory.product_id == product_id)
+    if store:
+        q = q.where(models.PriceHistory.store == store)
+    q = q.order_by(models.PriceHistory.changed_at.desc()).limit(limit)
+    res = await session.execute(q)
+    return res.scalars().all()

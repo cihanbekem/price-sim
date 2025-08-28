@@ -86,14 +86,8 @@ async def approve_price_change(
         )
     )
 
-    # >>> FİYATI BURADA GÜNCELLE <<<
-    if decision == "APPROVE":
-        prod = (
-            await session.execute(
-                select(models.Product).where(models.Product.id == req.product_id)
-            )
-        ).scalar_one()
-        prod.base_price = req.new_price  # katalog bu alanı gösteriyor
+    # Not: Fiyatı burada güncellemiyoruz. Push tamamlandığında ürün fiyatı
+    # güncellenir ve fiyat geçmişi kaydı o anda oluşturulur.
 
     await session.commit()
     return {"ok": True, "status": req.status}

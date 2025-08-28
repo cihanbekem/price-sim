@@ -25,8 +25,21 @@
     .table th,.table td{padding:8px;border-bottom:1px solid rgba(255,255,255,.12);text-align:left}
     .actions{display:flex;gap:8px;align-items:center;margin:8px 0}
     .chip{display:inline-block;padding:2px 8px;border:1px solid rgba(255,255,255,.12);border-radius:999px}
+    .live-user{display:flex; align-items:center; gap:8px}
+.live-user .avatar{
+  width:24px;height:24px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-weight:800;background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#0b1220;
+  font-size:12px;
+}
+.live-user .name{font-weight:700;font-size:12px;color:var(--text)}
+
   </style>
 </head>
+<header>
+    <!-- ... mevcut linkler vs ... -->
+    <div id="live-user" style="margin-left:auto"></div>
+  </header>
 <body>
   <div class="wrap">
     <div class="card">
@@ -43,6 +56,10 @@
         <span class="dot" id="conn-dot"></span><span id="conn-text">Bağlantı durumu</span>
       </div>
       <pre id="raw">—</pre>
+      <div class="section">
+        <h2>Aktif Kullanıcılar</h2>
+        <div id="active" class="muted">-</div>
+      </div>
     </div>
     <div class="section">
         <h2>Veritabanı Anlık Görünüm <span class="chip muted">dev-only</span></h2>
@@ -83,6 +100,10 @@
       $('status').textContent = 'Bağlandı. Canlı veri akışı başladı.';
       $('conn-dot').classList.add('ok'); $('conn-text').textContent = 'WebSocket açık';
       ws.send('hi');
+      try {
+        const u = JSON.parse(localStorage.getItem('auth-user')||'null');
+        if (u && (u.name||u.email)) ws.send(JSON.stringify({ type:'hello', user: u.name || u.email }));
+      } catch {}
     };
     ws.onmessage = (ev) => {
       try {
@@ -94,6 +115,9 @@
           $('m-queued').textContent = msg.queued ?? 0;
           $('m-ack').textContent = msg.avg_ack_ms ?? '-';
           $('raw').textContent = JSON.stringify(msg, null, 2);
+        } else if (msg.type === 'active-users') {
+          const users = msg.users || [];
+          $('active').innerHTML = users.length ? users.map(u=>`<span class="chip">${u}</span>`).join(' ') : '-';
         }
       } catch {}
     };
@@ -113,6 +137,7 @@
       ) + '</tbody>';
       el.innerHTML = head + body;
     }
+
   
     async function loadDB(){
       try{
@@ -139,5 +164,7 @@
     // ↓ ekleyin
     loadDB();
   </script>
+
+
 </body>
 </html>
