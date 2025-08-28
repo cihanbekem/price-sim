@@ -401,7 +401,7 @@ function Deployments() {
   React.useEffect(()=>{ load(); },[]);
   React.useEffect(()=>{ 
     if(!auto) return; 
-    const t = setInterval(load, 1000); 
+    const t = setInterval(load, 2000); 
     return ()=> clearInterval(t); 
   },[auto]);
   
