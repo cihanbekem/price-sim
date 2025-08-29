@@ -8,7 +8,7 @@ FastAPI tabanlı dijital etiket yönetim sistemi.
 
 ```bash
 # Projeyi klonlayın
-git clone <repo-url>
+git clone <https://github.com/cihanbekem/price-sim.git>
 cd price-sim
 
 # Docker Compose ile çalıştırın
