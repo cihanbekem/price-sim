@@ -9,6 +9,8 @@ services:
       # sqlite dosyası volume içinde kalıcı dursun
       - DATABASE_URL=sqlite+aiosqlite:////data/app.db
       - PYTHONUNBUFFERED=1
+      # Canlı metrikler için DB snapshot'ı aç
+      - LIVE_DEBUG_DB=1
     volumes:
       # DB persist
       - ./data:/data
