@@ -586,21 +586,76 @@ function RootApp() {
   const [authed, setAuthed] = React.useState(!!localStorage.getItem('auth-token'));
 
   // user’ı yükle
-  React.useEffect(()=>{ try { api.user = JSON.parse(localStorage.getItem("auth-user")||"null"); } catch {} }, []);
+  React.useEffect(()=>{ try { window.api.user = JSON.parse(localStorage.getItem("auth-user")||"null"); } catch {} }, []);
 
   // header mount
   React.useEffect(()=>{
     const holder = document.getElementById("theme-toggle");
     if (holder) ReactDOM.createRoot(holder).render(<ThemeSwitch />);
-    const ub = document.getElementById("userbox");
-    if (ub) ReactDOM.createRoot(ub).render(<UserBox />);
-    const lo = document.getElementById("logout-holder");
-    if (lo) ReactDOM.createRoot(lo).render(<LogoutButton onLoggedOut={()=>setAuthed(false)} />);
+    
+    const userbox = document.getElementById("userbox");
+    if (userbox) ReactDOM.createRoot(userbox).render(
+      <div style={{
+        display:"inline-flex", 
+        alignItems:"center", 
+        gap:10, 
+        padding:"8px 16px", 
+        border:"1px solid var(--border)", 
+        borderRadius:12,
+        background:"linear-gradient(135deg, rgba(255,255,255,.08), rgba(255,255,255,.02))",
+        boxShadow:"0 4px 12px rgba(0,0,0,.15)",
+        backdropFilter:"blur(10px)"
+      }}>
+        <div style={{
+          width:32,
+          height:32,
+          borderRadius:50,
+          background:"linear-gradient(135deg, #6366f1, #22d3ee)",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          fontSize:14,
+          fontWeight:700,
+          color:"#0b1220"
+        }}>
+          {(window.api.user && (window.api.user.name || window.api.user.email) || "U").charAt(0).toUpperCase()}
+        </div>
+        <div style={{display:"flex", flexDirection:"column", gap:2}}>
+          <span style={{fontWeight:600, fontSize:13, color:"var(--text)"}}>
+            {(window.api.user && (window.api.user.name || window.api.user.email)) || ""}
+          </span>
+          <span style={{fontSize:11, color:"var(--muted)"}}>Aktif</span>
+        </div>
+        <div style={{width:1, height:20, background:"var(--border)"}}></div>
+        <button 
+          className="btn ghost" 
+          onClick={() => { 
+            window.api.setToken(null); 
+            localStorage.removeItem('auth-token'); 
+            localStorage.removeItem('auth-user'); 
+            setAuthed(false); 
+          }}
+          style={{
+            padding:"6px 12px",
+            fontSize:12,
+            fontWeight:500,
+            border:"1px solid var(--border)",
+            borderRadius:8,
+            background:"transparent",
+            color:"var(--text)",
+            cursor:"pointer",
+            transition:"all 0.2s ease"
+          }}
+        >
+          Çıkış
+        </button>
+      </div>
+    );
   }, []);
 
-  if (!authed) return <Login onLoggedIn={(user) => {
-    api.user = user || api.user || null;
-    if (api.user) localStorage.setItem("auth-user", JSON.stringify(api.user));
+  if (!authed) return <AuthShell onLoggedIn={(user) => {
+    window.api.user = user || window.api.user || null;
+    if (window.api.user) localStorage.setItem("auth-user", JSON.stringify(window.api.user));
     setAuthed(true);
   }} />;
 

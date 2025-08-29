@@ -66,7 +66,7 @@ async def login(body: dict, session: AsyncSession = Depends(get_session)):
     if not u or not _verify_password(password, u.password_hash):
         raise HTTPException(401, "geçersiz giriş")
     token = _make_token(u.id)
-    return {"token": token, "user": {"id": u.id, "email": u.email, "name": u.name}}
+    return {"access_token": token, "user": {"id": u.id, "email": u.email, "name": u.name}}
 
 
 @router.post("/google")
@@ -97,4 +97,4 @@ async def google_login(body: dict, session: AsyncSession = Depends(get_session))
         session.add(u)
         await session.commit()
     token = _make_token(u.id)
-    return {"token": token, "user": {"id": u.id, "email": u.email, "name": u.name}}
+    return {"access_token": token, "user": {"id": u.id, "email": u.email, "name": u.name}}
