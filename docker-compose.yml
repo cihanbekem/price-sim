@@ -1,0 +1,25 @@
+version: "3.9"
+services:
+  api:
+    build: .
+    container_name: price-sim
+    ports:
+      - "8000:8000"
+    environment:
+      # sqlite dosyası volume içinde kalıcı dursun
+      - DATABASE_URL=sqlite+aiosqlite:////data/app.db
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # DB persist
+      - ./data:/data
+      # statikleri dışarıdan güncellemek istersen:
+      - ./static:/app/static
+      # geliştirme modunda canlı reload istersen bunu da aç:
+      # - ./app:/app/app
+    # geliştirmede reload istersen yukarıdaki bind-mount ile birlikte şu komutu kullan:
+    # command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 10s
+      timeout: 3s
+      retries: 5

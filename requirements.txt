@@ -4,6 +4,11 @@ sqlalchemy>=2.0
 aiosqlite>=0.20
 pydantic>=2.7
 python-dateutil>=2.9
+pydantic-settings==2.4.0
+watchfiles==0.21.0
+python-multipart==0.0.9
 aiofiles>=24.1
 google-auth>=2.29
 passlib[bcrypt]>=1.7
+pydantic[email]>=2.7.0   # <-- EmailStr için şart
+
