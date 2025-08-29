@@ -1,5 +1,62 @@
-# price-sim
-An internship project with functions such as adding products with unique ID values, adding tags, matching tags and products, updating prices, and making distribution.
+# Dijital Etiket ve Market Asistanı
+
+FastAPI tabanlı dijital etiket yönetim sistemi.
+
+## Docker ile Çalıştırma
+
+### Hızlı Başlangıç
+
+```bash
+# Projeyi klonlayın
+git clone <repo-url>
+cd price-sim
+
+# Docker Compose ile çalıştırın
+docker-compose up -d
+
+# Uygulama http://localhost:8000 adresinde çalışacak
+```
+
+### Manuel Docker Build
+
+```bash
+# Image build edin
+docker build -t price-sim .
+
+# Container çalıştırın
+docker run -d \
+  --name price-sim \
+  -p 8000:8000 \
+  -v $(pwd)/data:/data \
+  -e DATABASE_URL=sqlite+aiosqlite:////data/app.db \
+  -e APP_SECRET=your-secret-key-here \
+  price-sim
+```
+
+## Ortam Değişkenleri
+
+- `DATABASE_URL`: SQLite veritabanı URL'i (varsayılan: `sqlite+aiosqlite:///./esl.db`)
+- `APP_SECRET`: JWT token imzalama için gizli anahtar
+- `GOOGLE_CLIENT_ID`: Google OAuth için Client ID (opsiyonel)
+
+## Veritabanı
+
+SQLite veritabanı `/data` volume'unda saklanır. Container yeniden başlatıldığında veriler korunur.
+
+## API Dokümantasyonu
+
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+## Özellikler
+
+- ✅ Kullanıcı kimlik doğrulama (local + Google)
+- ✅ Ürün ve etiket yönetimi
+- ✅ Fiyat değişikliği onay süreci
+- ✅ Canlı metrikler ve WebSocket
+- ✅ Dijital etiket simülasyonu
+- ✅ Responsive web arayüzü
+
 
 # Çalıştırma
 LIVE_DEBUG_DB=1 uvicorn app.main:app --reload
