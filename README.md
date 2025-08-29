@@ -13,3 +13,5 @@ LIVE_DEBUG_DB=1 uvicorn app.main:app --reload
 <img width="1504" height="791" alt="Ekran Resmi 2025-08-29 15 53 01" src="https://github.com/user-attachments/assets/79f74a24-e9ff-40d1-a150-7617efa1b501" />
 <img width="1506" height="796" alt="Ekran Resmi 2025-08-29 15 53 13" src="https://github.com/user-attachments/assets/848ee26c-eea8-42e2-8ae1-62d6742ef161" />
 <img width="1506" height="797" alt="Ekran Resmi 2025-08-29 15 53 29" src="https://github.com/user-attachments/assets/e4d5d77f-44f9-4d6a-98dc-b5774ef7a474" />
+<img width="516" height="352" alt="Ekran Resmi 2025-08-29 15 57 49" src="https://github.com/user-attachments/assets/8c4376fe-cc38-4b37-9d4b-7c329cf8bd15" />
+<img width="511" height="287" alt="Ekran Resmi 2025-08-29 15 58 01" src="https://github.com/user-attachments/assets/f559a2df-7b51-4007-94d3-2ec6aec52a37" />
